@@ -33,7 +33,7 @@ server.listen(PORT, () => {
   console.log(`METEOR running on server http://localhost:${PORT}/`);
 });
 
-// connect to mongoDB database
+// :connect to mongoDB database
 connectDB(URL);
 
 app.use('/', router())

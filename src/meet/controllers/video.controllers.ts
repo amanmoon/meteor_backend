@@ -8,7 +8,13 @@ dotenv.config();
 
 let workers: mediasoup.types.Worker[] = [];
 let routers: { [id: string]: mediasoup.types.Router } = {};
-let room: { [id: string]: { [username: string]: mediasoup.types.Transport } };
+let room: {
+    [key: string]: {
+        [key: string]: {
+            [transportType: string]: mediasoup.types.WebRtcTransport | undefined;
+        };
+    };
+} = {};
 let stats: { [id: string]: number } = {}
 
 async function createMeet(req: Request, res: Response, next: NextFunction) {
@@ -33,6 +39,7 @@ async function createMeet(req: Request, res: Response, next: NextFunction) {
 
         const _worker = workers[Number(minKey) - 1];
         await createRouter(_worker, id);
+        room[id] = {};
         stats[minKey!] += 1;
         res.send(id);
     } catch (error) {
@@ -49,17 +56,20 @@ function getRTPcapablities(id: string) {
     }
 }
 
-async function getLocalTransportParm(id: string) {
+async function getLocalTransportParm(id: string, user: { name: string, email: string }) {
     try {
-        const transportParams = await createLocalTransport(id!);
-        const transport = {
-            id: transportParams?.id,
-            iceParameters: transportParams?.iceParameters,
-            iceCandidates: transportParams?.iceCandidates,
-            dtlsParameters: transportParams?.dtlsParameters,
-            sctpParameters: transportParams?.sctpParameters
+        const transport = await createLocalTransport(id!);
+        const userIdentification = user.email.split('@')[0] + '/' + user.name;
+        room[id][userIdentification] = {};
+        room[id][userIdentification]['sendTransport'] = transport;
+        const transportParams = {
+            id: transport?.id,
+            iceParameters: transport?.iceParameters,
+            iceCandidates: transport?.iceCandidates,
+            dtlsParameters: transport?.dtlsParameters,
+            sctpParameters: transport?.sctpParameters
         };
-        return transport;
+        return transportParams;
     } catch (error) {
         console.log(error);
     }
@@ -124,6 +134,28 @@ async function createLocalTransport(id: string) {
     }
 }
 
+async function connectLocalTransport(id: string, user: { name: string, email: string }, dtlsParameters: mediasoup.types.DtlsParameters) {
+    try {
+        const userIdentification = user.email.split('@')[0] + '/' + user.name;
+        const transport = room[id][userIdentification]['sendTransport'];
+        await transport?.connect({ dtlsParameters: dtlsParameters });
+        console.log('transport connected')
+    } catch (error) {
+        console.log('error while connecting transport');
+    }
+}
+
+async function produceLocalTransport(id: string, user: { name: string, email: string }, kind: mediasoup.types.MediaKind, rtpParameters: mediasoup.types.RtpParameters) {
+    try {
+        const userIdentification = user.email.split('@')[0] + '/' + user.name;
+        const transport = room[id][userIdentification]['sendTransport'];
+        const producerId = await transport?.produce({ kind: kind, rtpParameters: rtpParameters });
+        return producerId;
+    } catch (error) {
+        console.log('error while producing transport');
+    }
+}
+
 function generateRandomString(length: number): string {
     const characters = 'abcdefghijklmnopqrstuvwxyz'; // characters to use
     let result = '';
@@ -137,4 +169,4 @@ function generateRandomString(length: number): string {
     return result;
 }
 
-export { createMeet, getRTPcapablities, getLocalTransportParm, getRouter, createLocalTransport };
+export { createMeet, getRTPcapablities, getLocalTransportParm, getRouter, createLocalTransport, connectLocalTransport, produceLocalTransport };
